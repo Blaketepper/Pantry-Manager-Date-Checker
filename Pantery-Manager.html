@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pantry Manager — Expiration Dates</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa4b2;
+      --accent:#6ee7b7;
+      --glass: rgba(255,255,255,0.03);
+      --radius:12px;
+      --pad:14px;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+      color-scheme: dark;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071023 0%, #0b1220 100%);color:#e6eef6}
+    .wrap{max-width:980px;margin:28px auto;padding:18px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.015));border-radius:16px;box-shadow: 0 6px 30px rgba(2,6,23,0.7);}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted);font-size:13px}
+    .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    input[type="text"], input[type="date"], select{
+      background:var(--glass);border:1px solid rgba(255,255,255,0.04);padding:10px 12px;border-radius:10px;color:inherit;font-size:14px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    button{
+      background:linear-gradient(180deg,#1f6feb,#0c4ad6);border:0;padding:10px 14px;border-radius:10px;color:white;font-weight:600;cursor:pointer;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6), inset 0 -2px 0 rgba(0,0,0,0.12);
+    }
+    button.alt{background:transparent;border:1px solid rgba(255,255,255,0.06);box-shadow:none}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:10px 8px;text-align:left;font-size:14px;border-bottom:1px solid rgba(255,255,255,0.03)}
+    th{color:var(--muted);font-weight:600;font-size:13px}
+    tr.grey{background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.01))}
+    tr.yellow{background:linear-gradient(90deg, rgba(255,182,76,0.06), rgba(255,182,76,0.03)); color: #111}
+    tr.red{background:linear-gradient(90deg, rgba(255,102,102,0.06), rgba(255,102,102,0.03)); color: #111}
+    .chip{display:inline-block;padding:6px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.02)}
+    .muted{color:var(--muted);font-size:13px}
+    .actions button{margin-left:6px}
+    .empty{padding:20px;text-align:center;color:var(--muted)}
+    .top-right{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+    .small{font-size:12px;padding:7px 9px;border-radius:8px}
+    .danger{background:linear-gradient(180deg,#ff6b6b,#ff3b3b)}
+    @media (max-width:700px){
+      .form-row{flex-direction:column}
+      th,td{font-size:13px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" role="application" aria-label="Pantry manager with expiration dates">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h1>Pantry Manager</h1>
+        <p class="lead">Add items with expiration dates. Grey = not close, Yellow = within 3 days, Red = today or past.</p>
+      </div>
+      <div class="top-right">
+        <div class="chip" id="todayLabel"></div>
+        <button class="small alt" id="clearExpiredBtn">Clear expired</button>
+      </div>
+    </div>
+
+    <form id="addForm" onsubmit="return false;">
+      <div class="form-row">
+        <input id="itemName" type="text" placeholder="Item name (e.g. Milk)" required />
+        <input id="expDate" type="date" required />
+        <select id="quantity" aria-label="quantity">
+          <option value="1">Qty: 1</option>
+          <option value="2">Qty: 2</option>
+          <option value="3">Qty: 3</option>
+          <option value="4">Qty: 4</option>
+          <option value="5">Qty: 5</option>
+        </select>
+        <button id="addBtn">Add item</button>
+        <button class="alt" id="addSampleBtn" type="button">Add sample</button>
+      </div>
+    </form>
+
+    <div class="controls">
+      <label class="muted">Sort</label>
+      <select id="sortBy" class="small">
+        <option value="exp-asc">Expiration ↑</option>
+        <option value="exp-desc">Expiration ↓</option>
+        <option value="name-asc">Name A→Z</option>
+        <option value="name-desc">Name Z→A</option>
+      </select>
+
+      <label class="muted">Filter</label>
+      <select id="filterBy" class="small">
+        <option value="all">All</option>
+        <option value="notclose">Not close</option>
+        <option value="soon">Soon (≤3 days)</option>
+        <option value="expired">Expired / Today</option>
+      </select>
+
+      <button class="alt small danger" id="clearAllBtn" type="button">Clear all</button>
+    </div>
+
+    <div id="listWrap">
+      <table id="itemsTable" aria-live="polite">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Expires</th>
+            <th>Days</th>
+            <th style="width:170px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+    </div>
+
+    <p class="muted" style="margin-top:12px">Tip: use the date picker to set expiration. Items persist in this browser.</p>
+  </div>
+
+  <script>
+    // Pantry Manager - single-file (import/export removed)
+    (function(){
+      const LS_KEY = 'pantry_items_v1';
+      const DAYS_SOON = 3; // yellow threshold: within 3 days (1,2,3) before expiration
+      const addForm = document.getElementById('addForm');
+      const itemName = document.getElementById('itemName');
+      const expDate = document.getElementById('expDate');
+      const quantity = document.getElementById('quantity');
+      const addBtn = document.getElementById('addBtn');
+      const addSampleBtn = document.getElementById('addSampleBtn');
+      const itemsBody = document.getElementById('itemsBody');
+      const sortBy = document.getElementById('sortBy');
+      const filterBy = document.getElementById('filterBy');
+      const clearExpiredBtn = document.getElementById('clearExpiredBtn');
+      const clearAllBtn = document.getElementById('clearAllBtn');
+      const todayLabel = document.getElementById('todayLabel');
+
+      function todayISO(){
+        // returns YYYY-MM-DD of local today (midnight local)
+        const d = new Date();
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        const local = new Date(d.getTime() - tzOffset);
+        return local.toISOString().slice(0,10);
+      }
+
+      todayLabel.textContent = 'Today: ' + todayISO();
+
+      function loadItems(){
+        try {
+          const raw = localStorage.getItem(LS_KEY);
+          if (!raw) return [];
+          return JSON.parse(raw);
+        } catch(e){
+          console.error('load error', e);
+          return [];
+        }
+      }
+
+      function saveItems(items){
+        localStorage.setItem(LS_KEY, JSON.stringify(items));
+      }
+
+      function daysBetween(dateStr){
+        // difference in full days: expiryDate - today (local midnight)
+        const today = new Date(todayISO() + 'T00:00:00');
+        const d = new Date(dateStr + 'T00:00:00');
+        const ms = d - today;
+        return Math.floor(ms / (1000 * 60 * 60 * 24));
+      }
+
+      function getStateForDate(dateStr){
+        // returns 'red' (today or past), 'yellow' (within DAYS_SOON >0), 'grey' (otherwise)
+        const diff = daysBetween(dateStr);
+        if (diff <= 0) return 'red';
+        if (diff <= DAYS_SOON) return 'yellow';
+        return 'grey';
+      }
+
+      function createId(){
+        return 'id_' + Math.random().toString(36).slice(2,9);
+      }
+
+      function addItem(name, exp, qty=1){
+        if (!name || !exp) return;
+        const items = loadItems();
+        items.push({ id:createId(), name: name.trim(), exp: exp, qty: Number(qty) });
+        saveItems(items);
+        renderList();
+      }
+
+      function updateItem(id, data){
+        const items = loadItems();
+        const idx = items.findIndex(it => it.id === id);
+        if (idx === -1) return;
+        items[idx] = Object.assign({}, items[idx], data);
+        saveItems(items);
+        renderList();
+      }
+
+      function deleteItem(id){
+        let items = loadItems();
+        items = items.filter(it => it.id !== id);
+        saveItems(items);
+        renderList();
+      }
+
+      function clearExpired(){
+        let items = loadItems();
+        items = items.filter(it => daysBetween(it.exp) > 0);
+        saveItems(items);
+        renderList();
+      }
+
+      function clearAll(){
+        if (!confirm('Clear ALL pantry items? This cannot be undone.')) return;
+        localStorage.removeItem(LS_KEY);
+        renderList();
+      }
+
+      function renderList(){
+        const items = loadItems();
+        if (!items || items.length === 0){
+          itemsBody.innerHTML = '<tr><td colspan="5" class="empty">No items — add some! (they are saved in your browser)</td></tr>';
+          return;
+        }
+
+        // Apply sorting
+        const sort = sortBy.value;
+        const sorted = items.slice().sort((a,b) => {
+          if (sort === 'exp-asc') return a.exp.localeCompare(b.exp);
+          if (sort === 'exp-desc') return b.exp.localeCompare(a.exp);
+          if (sort === 'name-asc') return a.name.localeCompare(b.name);
+          if (sort === 'name-desc') return b.name.localeCompare(a.name);
+          return 0;
+        });
+
+        // Filter
+        const filter = filterBy.value;
+        const filtered = sorted.filter(it => {
+          const s = getStateForDate(it.exp);
+          if (filter === 'all') return true;
+          if (filter === 'notclose') return s === 'grey';
+          if (filter === 'soon') return s === 'yellow';
+          if (filter === 'expired') return s === 'red';
+          return true;
+        });
+
+        // Build rows
+        itemsBody.innerHTML = '';
+        for (const it of filtered){
+          const tr = document.createElement('tr');
+          const state = getStateForDate(it.exp);
+          tr.className = state;
+
+          // Item + edit name
+          const tdName = document.createElement('td');
+          tdName.innerHTML = `<strong>${escapeHtml(it.name)}</strong><div class="muted" style="margin-top:6px">ID: ${it.id}</div>`;
+          tr.appendChild(tdName);
+
+          // Qty (editable)
+          const tdQty = document.createElement('td');
+          tdQty.innerHTML = `<input type="number" min="1" value="${it.qty}" style="width:68px;padding:6px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit" />`;
+          tr.appendChild(tdQty);
+
+          // Expiration (editable)
+          const tdExp = document.createElement('td');
+          tdExp.innerHTML = `<input type="date" value="${it.exp}" style="padding:6px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit" />`;
+          tr.appendChild(tdExp);
+
+          // Days
+          const tdDays = document.createElement('td');
+          const diff = daysBetween(it.exp);
+          tdDays.textContent = (diff <= 0) ? (diff === 0 ? 'Today' : (Math.abs(diff) + ' day(s) ago')) : (diff + ' day(s)');
+          tr.appendChild(tdDays);
+
+          // Actions
+          const tdAct = document.createElement('td');
+          tdAct.className = 'actions';
+          tdAct.style.textAlign = 'right';
+
+          const saveBtn = document.createElement('button');
+          saveBtn.className = 'small';
+          saveBtn.textContent = 'Save';
+          saveBtn.onclick = () => {
+            const newQty = tdQty.querySelector('input').value;
+            const newExp = tdExp.querySelector('input').value;
+            if (!newExp) { alert('Expiration date required'); return; }
+            updateItem(it.id, { qty: Number(newQty), exp: newExp });
+          };
+
+          const editNameBtn = document.createElement('button');
+          editNameBtn.className = 'alt small';
+          editNameBtn.textContent = 'Rename';
+          editNameBtn.onclick = () => {
+            const newName = prompt('Rename item', it.name);
+            if (newName && newName.trim().length) updateItem(it.id, { name: newName.trim() });
+          };
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'alt small danger';
+          delBtn.textContent = 'Delete';
+          delBtn.onclick = () => {
+            if (confirm('Delete "' + it.name + '"?')) deleteItem(it.id);
+          };
+
+          tdAct.appendChild(saveBtn);
+          tdAct.appendChild(editNameBtn);
+          tdAct.appendChild(delBtn);
+
+          tr.appendChild(tdAct);
+
+          itemsBody.appendChild(tr);
+        }
+
+        if (filtered.length === 0) {
+          itemsBody.innerHTML = '<tr><td colspan="5" class="empty">No items match the filter.</td></tr>';
+        }
+      }
+
+      function escapeHtml(unsafe) {
+        return unsafe.replace(/[&<"'>]/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'" :'&#039;'})[m]; });
+      }
+
+      // wire events
+      addBtn.addEventListener('click', () => {
+        const name = itemName.value.trim();
+        const exp = expDate.value;
+        const qty = quantity.value;
+        if (!name) { itemName.focus(); return; }
+        if (!exp) { expDate.focus(); return; }
+        addItem(name, exp, qty);
+        itemName.value = '';
+        expDate.value = '';
+        quantity.value = '1';
+        itemName.focus();
+      });
+
+      addSampleBtn.addEventListener('click', () => {
+        // adds a few sample items with varying dates
+        const today = new Date();
+        const format = d => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth()+1).padStart(2,'0');
+          const day = String(d.getDate()).padStart(2,'0');
+          return `${y}-${m}-${day}`;
+        };
+        const copyDate = d => new Date(d.getTime());
+        addItem('Milk', format(copyDate(today)), 1); // today
+        const t1 = new Date(today); t1.setDate(t1.getDate() + 2); addItem('Eggs', format(t1), 12); // soon
+        const t2 = new Date(today); t2.setDate(t2.getDate() + 10); addItem('Rice', format(t2), 1); // not close
+        alert('Added 3 sample items.');
+      });
+
+      sortBy.addEventListener('change', renderList);
+      filterBy.addEventListener('change', renderList);
+
+      clearExpiredBtn.addEventListener('click', () => {
+        if (confirm('Remove all items that are expired or today?')) clearExpired();
+      });
+
+      clearAllBtn.addEventListener('click', clearAll);
+
+      // initial render
+      renderList();
+
+      // Expose for debugging (optional)
+      window.pantry = {
+        load: loadItems,
+        save: saveItems,
+        add: addItem,
+        clearExpired,
+      };
+
+    })();
+  </script>
+</body>
+</html>
